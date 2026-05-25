@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DiffLens — Text Comparison Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f13;
+    --surface: #13161c;
+    --surface2: #1a1e27;
+    --surface3: #21262f;
+    --border: #2a2f3a;
+    --border2: #343b49;
+    --text: #e2e8f0;
+    --text-muted: #6b7894;
+    --text-dim: #9aa5bc;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --add: #10b981;
+    --add-bg: rgba(16,185,129,0.08);
+    --add-border: rgba(16,185,129,0.25);
+    --del: #ef4444;
+    --del-bg: rgba(239,68,68,0.08);
+    --del-border: rgba(239,68,68,0.25);
+    --mod: #f59e0b;
+    --mod-bg: rgba(245,158,11,0.08);
+    --same: transparent;
+    --gutter: #1a1e27;
+    --radius: 10px;
+    --mono: 'JetBrains Mono', monospace;
+    --display: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--display);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* HEADER */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13,15,19,0.92);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .logo-text {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* BUTTONS */
+  .btn {
+    font-family: var(--display);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 16px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .btn:hover {
+    border-color: var(--border2);
+    color: var(--text);
+    background: var(--surface3);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #0099cc);
+    border-color: transparent;
+    color: #000;
+    font-weight: 700;
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #33eaff, #00b3ee);
+    color: #000;
+    box-shadow: 0 0 20px rgba(0,229,255,0.3);
+  }
+
+  .btn-danger {
+    color: var(--del);
+    border-color: rgba(239,68,68,0.3);
+  }
+
+  .btn-danger:hover {
+    background: var(--del-bg);
+    border-color: var(--del);
+    color: var(--del);
+  }
+
+  /* MAIN LAYOUT */
+  main {
+    position: relative;
+    z-index: 1;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 24px 24px 60px;
+  }
+
+  /* TOOLBAR */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 4px;
+  }
+
+  .toolbar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 0 8px;
+  }
+
+  .tab-btn {
+    font-family: var(--display);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tab-btn.active {
+    background: var(--surface3);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--border2);
+  }
+
+  .tab-btn:hover:not(.active) { color: var(--text-dim); }
+
+  .toolbar-sep {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  /* STATS BAR */
+  .stats-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    min-height: 48px;
+  }
+
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+
+  .stat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .stat-dot.add { background: var(--add); }
+  .stat-dot.del { background: var(--del); }
+  .stat-dot.mod { background: var(--mod); }
+
+  .stat-value { font-weight: 600; color: var(--text); }
+  .stat-label { color: var(--text-muted); }
+
+  .stats-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+  }
+
+  /* EDITOR PANELS */
+  .editors-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .badge-a { background: var(--add-bg); color: var(--add); border: 1px solid var(--add-border); }
+  .badge-b { background: var(--del-bg); color: var(--del); border: 1px solid var(--del-border); }
+
+  .panel-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .editor-area {
+    flex: 1;
+    position: relative;
+  }
+
+  textarea {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    width: 100%;
+    min-height: 320px;
+    background: transparent;
+    color: var(--text);
+    border: none;
+    outline: none;
+    resize: vertical;
+    padding: 14px 16px;
+    tab-size: 2;
+    caret-color: var(--accent);
+  }
+
+  textarea::placeholder { color: var(--text-muted); }
+
+  /* DIFF OUTPUT */
+  .diff-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .diff-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .diff-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .diff-title .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .diff-actions { display: flex; gap: 6px; }
+
+  /* SPLIT VIEW */
+  .split-diff {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: none;
+  }
+
+  .split-pane {
+    overflow-x: auto;
+    border-right: 1px solid var(--border);
+  }
+
+  .split-pane:last-child { border-right: none; }
+
+  .split-pane-header {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  /* UNIFIED VIEW */
+  .unified-diff { overflow-x: auto; }
+
+  /* DIFF LINE */
+  .diff-line {
+    display: flex;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    min-height: 22px;
+    border-left: 2px solid transparent;
+    transition: background 0.1s;
+  }
+
+  .diff-line:hover { filter: brightness(1.15); }
+
+  .diff-line.add {
+    background: var(--add-bg);
+    border-left-color: var(--add);
+  }
+
+  .diff-line.del {
+    background: var(--del-bg);
+    border-left-color: var(--del);
+  }
+
+  .diff-line.mod {
+    background: var(--mod-bg);
+    border-left-color: var(--mod);
+  }
+
+  .diff-line.same { border-left-color: transparent; }
+
+  .diff-line.hunk {
+    background: rgba(124,58,237,0.08);
+    border-left-color: var(--accent2);
+  }
+
+  .line-num {
+    flex-shrink: 0;
+    width: 44px;
+    padding: 0 8px 0 4px;
+    text-align: right;
+    color: var(--text-muted);
+    font-size: 11px;
+    background: var(--gutter);
+    border-right: 1px solid var(--border);
+    user-select: none;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 1px;
+  }
+
+  .line-sign {
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+    padding-top: 1px;
+    font-weight: 700;
+  }
+
+  .diff-line.add .line-sign { color: var(--add); }
+  .diff-line.del .line-sign { color: var(--del); }
+  .diff-line.mod .line-sign { color: var(--mod); }
+  .diff-line.same .line-sign { color: var(--text-muted); }
+
+  .line-content {
+    flex: 1;
+    padding: 0 12px 0 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text);
+    padding-top: 1px;
+  }
+
+  .diff-line.hunk .line-content {
+    color: var(--accent2);
+    font-style: italic;
+  }
+
+  /* Inline char-level highlighting */
+  .char-add {
+    background: rgba(16,185,129,0.35);
+    border-radius: 2px;
+  }
+
+  .char-del {
+    background: rgba(239,68,68,0.35);
+    border-radius: 2px;
+    text-decoration: line-through;
+    text-decoration-color: var(--del);
+  }
+
+  /* WORD VIEW */
+  .word-diff {
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.9;
+    overflow-x: auto;
+  }
+
+  .word-add {
+    background: var(--add-bg);
+    color: var(--add);
+    border: 1px solid var(--add-border);
+    border-radius: 3px;
+    padding: 1px 4px;
+  }
+
+  .word-del {
+    background: var(--del-bg);
+    color: var(--del);
+    border: 1px solid var(--del-border);
+    border-radius: 3px;
+    padding: 1px 4px;
+    text-decoration: line-through;
+  }
+
+  /* EMPTY STATE */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    gap: 12px;
+    color: var(--text-muted);
+  }
+
+  .empty-icon { font-size: 40px; opacity: 0.4; }
+  .empty-title { font-size: 15px; font-weight: 600; color: var(--text-dim); }
+  .empty-sub { font-size: 13px; font-family: var(--mono); }
+
+  /* IDENTICAL STATE */
+  .identical-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 36px 20px;
+    color: var(--add);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* OPTIONS PANEL */
+  .options-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+
+  .toggle-wrap:hover { border-color: var(--border2); }
+
+  .toggle {
+    width: 32px;
+    height: 18px;
+    background: var(--border);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    top: 3px; left: 3px;
+    transition: transform 0.2s;
+  }
+
+  .toggle.on { background: var(--accent); }
+  .toggle.on::after { transform: translateX(14px); }
+
+  .toggle-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+
+  /* COPY TOAST */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.25s ease;
+    z-index: 999;
+    pointer-events: none;
+  }
+
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  /* FIND BAR */
+  .find-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+  }
+
+  .find-bar input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    padding: 5px 10px;
+    border-radius: 5px;
+    outline: none;
+    min-width: 0;
+  }
+
+  .find-bar input:focus { border-color: var(--accent); }
+  .find-count { font-size: 11px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+
+  mark {
+    background: rgba(0,229,255,0.3);
+    color: var(--text);
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
+  mark.current { background: rgba(0,229,255,0.7); }
+
+  /* CONTEXT */
+  .ctx-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  .ctx-input input[type=number] {
+    width: 52px;
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 5px;
+    outline: none;
+    text-align: center;
+  }
+
+  .ctx-input input[type=number]:focus { border-color: var(--accent); }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .editors-wrapper { grid-template-columns: 1fr; }
+    .split-diff { grid-template-columns: 1fr; }
+    .split-pane { border-right: none; border-bottom: 1px solid var(--border); }
+    .split-pane:last-child { border-bottom: none; }
+    .toolbar { gap: 8px; }
+    main { padding: 16px 12px 40px; }
+  }
+
+  @media (max-width: 600px) {
+    .header-actions .btn span { display: none; }
+    .stats-bar { gap: 10px; }
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* ANIMATE IN */
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .jump-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .jump-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  .section-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    padding: 10px 14px 6px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⟨/⟩</div>
+    <div class="logo-text">Diff<span>Lens</span></div>
+  </div>
+  <div class="header-actions">
+    <button class="btn" onclick="loadSample()">⚡ <span>Sample</span></button>
+    <button class="btn btn-danger" onclick="clearAll()">✕ <span>Clear</span></button>
+    <button class="btn btn-primary" onclick="runDiff()">▶ Compare</button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main>
+
+  <!-- OPTIONS ROW -->
+  <div class="options-row">
+    <div class="toolbar-group">
+      <span class="toolbar-label">View</span>
+      <button class="tab-btn active" id="view-unified" onclick="setView('unified')">Unified</button>
+      <button class="tab-btn" id="view-split" onclick="setView('split')">Split</button>
+      <button class="tab-btn" id="view-word" onclick="setView('word')">Word</button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-group">
+      <span class="toolbar-label">Diff By</span>
+      <button class="tab-btn active" id="by-line" onclick="setDiffBy('line')">Line</button>
+      <button class="tab-btn" id="by-word" onclick="setDiffBy('word')">Word</button>
+      <button class="tab-btn" id="by-char" onclick="setDiffBy('char')">Char</button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <label class="toggle-wrap" onclick="toggleOpt('ignoreCase')">
+      <div class="toggle" id="tog-ignoreCase"></div>
+      <span class="toggle-label">Ignore Case</span>
+    </label>
+
+    <label class="toggle-wrap" onclick="toggleOpt('ignoreWhitespace')">
+      <div class="toggle" id="tog-ignoreWhitespace"></div>
+      <span class="toggle-label">Ignore Whitespace</span>
+    </label>
+
+    <label class="toggle-wrap" onclick="toggleOpt('showInline')">
+      <div class="toggle on" id="tog-showInline"></div>
+      <span class="toggle-label">Inline Highlight</span>
+    </label>
+
+    <div class="ctx-input">
+      <span>Context</span>
+      <input type="number" id="ctx-lines" value="3" min="0" max="50" onchange="runDiff()">
+      <span>lines</span>
+    </div>
+  </div>
+
+  <!-- INPUT EDITORS -->
+  <div class="editors-wrapper">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Original <span class="badge badge-a">A</span></div>
+        <div class="panel-meta" id="meta-a">0 lines</div>
+      </div>
+      <div class="editor-area">
+        <textarea id="input-a" placeholder="Paste original text here…" oninput="onInput()"></textarea>
+      </div>
+      <div class="panel-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end;padding:6px 10px;">
+        <button class="btn" style="font-size:11px;padding:4px 10px;" onclick="copyText('a')">📋 Copy</button>
+        <button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;" onclick="pasteText('a')">📎 Paste</button>
+        <button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;" onclick="uploadFile('a')">⬆ File</button>
+        <input type="file" id="file-a" accept=".txt,.js,.ts,.py,.json,.html,.css,.md,.xml,.csv,.log" style="display:none" onchange="loadFile(event,'a')">
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Modified <span class="badge badge-b">B</span></div>
+        <div class="panel-meta" id="meta-b">0 lines</div>
+      </div>
+      <div class="editor-area">
+        <textarea id="input-b" placeholder="Paste modified text here…" oninput="onInput()"></textarea>
+      </div>
+      <div class="panel-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end;padding:6px 10px;">
+        <button class="btn" style="font-size:11px;padding:4px 10px;" onclick="copyText('b')">📋 Copy</button>
+        <button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;" onclick="pasteText('b')">📎 Paste</button>
+        <button class="btn" style="font-size:11px;padding:4px 10px;margin-left:4px;" onclick="uploadFile('b')">⬆ File</button>
+        <input type="file" id="file-b" accept=".txt,.js,.ts,.py,.json,.html,.css,.md,.xml,.csv,.log" style="display:none" onchange="loadFile(event,'b')">
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar" id="stats-bar">
+    <span class="stats-empty">Enter text above and click Compare ▶</span>
+  </div>
+
+  <!-- DIFF OUTPUT -->
+  <div class="diff-container" id="diff-container">
+    <div class="diff-header">
+      <div class="diff-title">
+        <div class="dot"></div>
+        Diff Result
+      </div>
+      <div class="diff-actions">
+        <div style="display:flex;gap:4px" id="jump-btns"></div>
+        <button class="btn" onclick="toggleFind()" style="font-size:11px;padding:4px 10px;">🔍 Find</button>
+        <button class="btn" onclick="exportPatch()" style="font-size:11px;padding:4px 10px;">⬇ Patch</button>
+        <button class="btn" onclick="copyDiff()" style="font-size:11px;padding:4px 10px;">📋 Copy</button>
+      </div>
+    </div>
+
+    <!-- FIND BAR -->
+    <div class="find-bar" id="find-bar" style="display:none">
+      <span style="font-size:12px;color:var(--text-muted);font-weight:600;">🔍</span>
+      <input type="text" id="find-input" placeholder="Search in diff…" oninput="doFind()" onkeydown="findNav(event)">
+      <span class="find-count" id="find-count"></span>
+      <button class="btn" style="font-size:11px;padding:3px 8px;" onclick="findPrev()">↑</button>
+      <button class="btn" style="font-size:11px;padding:3px 8px;" onclick="findNext()">↓</button>
+      <button class="btn" style="font-size:11px;padding:3px 8px;" onclick="toggleFind()">✕</button>
+    </div>
+
+    <div id="diff-output">
+      <div class="empty-state">
+        <div class="empty-icon">⟨/⟩</div>
+        <div class="empty-title">No comparison yet</div>
+        <div class="empty-sub">Paste text in both panels and click Compare</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===================== STATE =====================
+let state = {
+  view: 'unified',    // unified | split | word
+  diffBy: 'line',     // line | word | char
+  ignoreCase: false,
+  ignoreWhitespace: false,
+  showInline: true,
+  contextLines: 3,
+  diffResult: null,
+  findMatches: [],
+  findIdx: -1,
+};
+
+// ===================== LCS / DIFF ENGINE =====================
+function lcs(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0 || n === 0) return [];
+  // Myers-style patience diff using LCS
+  const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (a[i-1] === b[j-1]) dp[i][j] = dp[i-1][j-1] + 1;
+      else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  const seq = [];
+  let i = m, j = n;
+  while (i > 0 && j > 0) {
+    if (a[i-1] === b[j-1]) { seq.unshift({ai: i-1, bi: j-1}); i--; j--; }
+    else if (dp[i-1][j] > dp[i][j-1]) i--;
+    else j--;
+  }
+  return seq;
+}
+
+function computeLineDiff(a, b, opts) {
+  let la = a.split('\n');
+  let lb = b.split('\n');
+
+  const norm = s => {
+    let r = s;
+    if (opts.ignoreCase) r = r.toLowerCase();
+    if (opts.ignoreWhitespace) r = r.replace(/\s+/g,' ').trim();
+    return r;
+  };
+
+  const na = la.map(norm);
+  const nb = lb.map(norm);
+
+  const common = lcs(na, nb);
+  const result = [];
+  let ai = 0, bi = 0, ci = 0;
+
+  while (ci < common.length) {
+    const {ai: ca, bi: cb} = common[ci];
+    // deleted from a
+    while (ai < ca) {
+      result.push({type: 'del', text: la[ai], lineA: ai+1, lineB: null});
+      ai++;
+    }
+    // added from b
+    while (bi < cb) {
+      result.push({type: 'add', text: lb[bi], lineA: null, lineB: bi+1});
+      bi++;
+    }
+    result.push({type: 'same', text: la[ai], lineA: ai+1, lineB: bi+1});
+    ai++; bi++; ci++;
+  }
+  // remaining
+  while (ai < la.length) {
+    result.push({type: 'del', text: la[ai], lineA: ai+1, lineB: null});
+    ai++;
+  }
+  while (bi < lb.length) {
+    result.push({type: 'add', text: lb[bi], lineA: null, lineB: bi+1});
+    bi++;
+  }
+
+  return result;
+}
+
+// Pair adjacent del+add into mod
+function pairModifiedLines(diff) {
+  const out = [];
+  let i = 0;
+  while (i < diff.length) {
+    if (diff[i].type === 'del' && i+1 < diff.length && diff[i+1].type === 'add') {
+      out.push({type: 'mod', textA: diff[i].text, textB: diff[i+1].text, lineA: diff[i].lineA, lineB: diff[i+1].lineB});
+      i += 2;
+    } else {
+      out.push(diff[i]);
+      i++;
+    }
+  }
+  return out;
+}
+
+// Char-level inline diff
+function inlineCharDiff(a, b) {
+  const ca = a.split('');
+  const cb = b.split('');
+  const common = lcs(ca, cb);
+  let ai = 0, bi = 0, ci = 0;
+  let htmlA = '', htmlB = '';
+
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  while (ci < common.length) {
+    const {ai: ca2, bi: cb2} = common[ci];
+    const delPart = a.slice(ai, ca2);
+    const addPart = b.slice(bi, cb2);
+    if (delPart) htmlA += `<span class="char-del">${esc(delPart)}</span>`;
+    if (addPart) htmlB += `<span class="char-add">${esc(addPart)}</span>`;
+    const samePart = esc(a[ca2]);
+    htmlA += samePart;
+    htmlB += samePart;
+    ai = ca2 + 1; bi = cb2 + 1; ci++;
+  }
+  if (ai < a.length) htmlA += `<span class="char-del">${esc(a.slice(ai))}</span>`;
+  if (bi < b.length) htmlB += `<span class="char-add">${esc(b.slice(bi))}</span>`;
+  return {htmlA, htmlB};
+}
+
+// Word-level diff for display
+function wordDiff(a, b) {
+  const wa = a.split(/(\s+)/);
+  const wb = b.split(/(\s+)/);
+  const common = lcs(wa, wb);
+  let ai = 0, bi = 0, ci = 0;
+  let html = '';
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  while (ci < common.length) {
+    const {ai: ca, bi: cb} = common[ci];
+    for (let x = ai; x < ca; x++) {
+      if (wa[x].trim()) html += `<span class="word-del">${esc(wa[x])}</span>`;
+    }
+    for (let x = bi; x < cb; x++) {
+      if (wb[x].trim()) html += `<span class="word-add">${esc(wb[x])}</span>`;
+    }
+    html += esc(wa[ca]);
+    ai = ca + 1; bi = cb + 1; ci++;
+  }
+  for (let x = ai; x < wa.length; x++) {
+    if (wa[x].trim()) html += `<span class="word-del">${esc(wa[x])}</span>`;
+    else html += esc(wa[x]);
+  }
+  for (let x = bi; x < wb.length; x++) {
+    if (wb[x].trim()) html += `<span class="word-add">${esc(wb[x])}</span>`;
+    else html += esc(wb[x]);
+  }
+  return html;
+}
+
+// Apply context collapsing
+function applyContext(diff, ctx) {
+  if (ctx < 0 || ctx === '' || isNaN(ctx)) return diff;
+  const changed = new Set();
+  diff.forEach((l, i) => {
+    if (l.type !== 'same') {
+      for (let d = Math.max(0, i - ctx); d <= Math.min(diff.length-1, i + ctx); d++) changed.add(d);
+    }
+  });
+  const result = [];
+  let skipping = false;
+  let skipStart = 0;
+  for (let i = 0; i < diff.length; i++) {
+    if (changed.has(i)) {
+      if (skipping && i > 0) {
+        const skipped = i - skipStart;
+        if (skipped > 0) result.push({type: 'hunk', text: `@@ -${skipStart+1} +${skipStart+1} @@ (${skipped} unchanged line${skipped>1?'s':''})`});
+      }
+      skipping = false;
+      result.push(diff[i]);
+    } else {
+      if (!skipping) { skipping = true; skipStart = i; }
+    }
+  }
+  if (skipping) {
+    const skipped = diff.length - skipStart;
+    if (skipped > 0) result.push({type: 'hunk', text: `@@ (${skipped} unchanged line${skipped>1?'s':''} hidden)`});
+  }
+  return result;
+}
+
+// ===================== RENDER =====================
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function renderLine(line, showInline) {
+  if (line.type === 'hunk') {
+    return `<div class="diff-line hunk">
+      <div class="line-num"></div><div class="line-num"></div>
+      <div class="line-sign">…</div>
+      <div class="line-content">${esc(line.text)}</div>
+    </div>`;
+  }
+
+  if (line.type === 'mod' && showInline) {
+    const {htmlA, htmlB} = inlineCharDiff(line.textA, line.textB);
+    return `<div class="diff-line del">
+        <div class="line-num">${line.lineA}</div><div class="line-num"></div>
+        <div class="line-sign">-</div>
+        <div class="line-content">${htmlA}</div>
+      </div>
+      <div class="diff-line add">
+        <div class="line-num"></div><div class="line-num">${line.lineB}</div>
+        <div class="line-sign">+</div>
+        <div class="line-content">${htmlB}</div>
+      </div>`;
+  }
+
+  if (line.type === 'mod') {
+    return `<div class="diff-line del">
+        <div class="line-num">${line.lineA}</div><div class="line-num"></div>
+        <div class="line-sign">-</div>
+        <div class="line-content">${esc(line.textA)}</div>
+      </div>
+      <div class="diff-line add">
+        <div class="line-num"></div><div class="line-num">${line.lineB}</div>
+        <div class="line-sign">+</div>
+        <div class="line-content">${esc(line.textB)}</div>
+      </div>`;
+  }
+
+  const sign = line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ';
+  const la = line.lineA ?? '';
+  const lb = line.lineB ?? '';
+  return `<div class="diff-line ${line.type}">
+    <div class="line-num">${la}</div>
+    <div class="line-num">${lb}</div>
+    <div class="line-sign">${sign}</div>
+    <div class="line-content">${esc(line.text)}</div>
+  </div>`;
+}
+
+function renderUnified(diff, ctx, showInline) {
+  const d = applyContext(pairModifiedLines(diff), ctx);
+  if (!d.length) return '<div class="identical-state">✅ Files are identical</div>';
+  return '<div class="unified-diff">' + d.map(l => renderLine(l, showInline)).join('') + '</div>';
+}
+
+function renderSplit(diff, ctx, showInline) {
+  const d = applyContext(pairModifiedLines(diff), ctx);
+  if (!d.length) return '<div class="identical-state">✅ Files are identical</div>';
+
+  let leftHtml = '', rightHtml = '';
+
+  d.forEach(line => {
+    if (line.type === 'hunk') {
+      const h = `<div class="diff-line hunk"><div class="line-num"></div><div class="line-sign">…</div><div class="line-content">${esc(line.text)}</div></div>`;
+      leftHtml += h; rightHtml += h;
+      return;
+    }
+    if (line.type === 'mod') {
+      const {htmlA, htmlB} = showInline ? inlineCharDiff(line.textA, line.textB) : {htmlA: esc(line.textA), htmlB: esc(line.textB)};
+      leftHtml += `<div class="diff-line del"><div class="line-num">${line.lineA}</div><div class="line-sign">-</div><div class="line-content">${htmlA}</div></div>`;
+      rightHtml += `<div class="diff-line add"><div class="line-num">${line.lineB}</div><div class="line-sign">+</div><div class="line-content">${htmlB}</div></div>`;
+      return;
+    }
+    if (line.type === 'same') {
+      const row = `<div class="diff-line same"><div class="line-num">${line.lineA}</div><div class="line-sign"> </div><div class="line-content">${esc(line.text)}</div></div>`;
+      leftHtml += row; rightHtml += row;
+    } else if (line.type === 'del') {
+      leftHtml += `<div class="diff-line del"><div class="line-num">${line.lineA}</div><div class="line-sign">-</div><div class="line-content">${esc(line.text)}</div></div>`;
+      rightHtml += `<div class="diff-line same" style="background:var(--surface2)"><div class="line-num"></div><div class="line-sign"></div><div class="line-content"></div></div>`;
+    } else if (line.type === 'add') {
+      leftHtml += `<div class="diff-line same" style="background:var(--surface2)"><div class="line-num"></div><div class="line-sign"></div><div class="line-content"></div></div>`;
+      rightHtml += `<div class="diff-line add"><div class="line-num">${line.lineB}</div><div class="line-sign">+</div><div class="line-content">${esc(line.text)}</div></div>`;
+    }
+  });
+
+  return `<div class="split-diff">
+    <div class="split-pane">
+      <div class="split-pane-header">Original (A)</div>
+      ${leftHtml}
+    </div>
+    <div class="split-pane">
+      <div class="split-pane-header">Modified (B)</div>
+      ${rightHtml}
+    </div>
+  </div>`;
+}
+
+function renderWordView(a, b) {
+  // Line-by-line word diff
+  const la = a.split('\n');
+  const lb = b.split('\n');
+  const lineDiff = lcs(la, lb);
+  let ai = 0, bi = 0, ci = 0;
+  let html = '<div class="word-diff">';
+
+  while (ci < lineDiff.length) {
+    const {ai: ca, bi: cb} = lineDiff[ci];
+    while (ai < ca || bi < cb) {
+      if (ai < ca && bi < cb) {
+        html += wordDiff(la[ai], lb[bi]) + '\n';
+        ai++; bi++;
+      } else if (ai < ca) {
+        html += `<span class="word-del">${esc(la[ai])}</span>\n`; ai++;
+      } else {
+        html += `<span class="word-add">${esc(lb[bi])}</span>\n`; bi++;
+      }
+    }
+    html += esc(la[ca]) + '\n';
+    ai++; bi++; ci++;
+  }
+  while (ai < la.length) { html += `<span class="word-del">${esc(la[ai])}</span>\n`; ai++; }
+  while (bi < lb.length) { html += `<span class="word-add">${esc(lb[bi])}</span>\n`; bi++; }
+  html += '</div>';
+  return html;
+}
+
+// ===================== STATS =====================
+function computeStats(diff) {
+  let added = 0, deleted = 0, modified = 0, same = 0;
+  const paired = pairModifiedLines(diff);
+  paired.forEach(l => {
+    if (l.type === 'add') added++;
+    else if (l.type === 'del') deleted++;
+    else if (l.type === 'mod') modified++;
+    else if (l.type === 'same') same++;
+  });
+  return {added, deleted, modified, same};
+}
+
+function renderStats(stats, totalA, totalB) {
+  const bar = document.getElementById('stats-bar');
+  if (!stats) { bar.innerHTML = '<span class="stats-empty">Enter text above and click Compare ▶</span>'; return; }
+  const {added, deleted, modified, same} = stats;
+  const total = added + deleted + modified + same;
+  const sim = total > 0 ? Math.round((same / total) * 100) : 100;
+
+  bar.innerHTML = `
+    <div class="stat-item"><div class="stat-dot add"></div><span class="stat-value">+${added}</span><span class="stat-label">added</span></div>
+    <div class="stat-item"><div class="stat-dot del"></div><span class="stat-value">-${deleted}</span><span class="stat-label">deleted</span></div>
+    <div class="stat-item"><div class="stat-dot mod"></div><span class="stat-value">~${modified}</span><span class="stat-label">modified</span></div>
+    <div class="stat-item" style="margin-left:auto"><span class="stat-label">A:</span><span class="stat-value">${totalA} lines</span></div>
+    <div class="stat-item"><span class="stat-label">B:</span><span class="stat-value">${totalB} lines</span></div>
+    <div class="stat-item" style="padding:3px 10px;background:var(--surface3);border-radius:6px;border:1px solid var(--border2)">
+      <span class="stat-label">Similarity</span>
+      <span class="stat-value" style="color:${sim>80?'var(--add)':sim>50?'var(--mod)':'var(--del)'}">${sim}%</span>
+    </div>
+  `;
+}
+
+// ===================== MAIN DIFF =====================
+function runDiff() {
+  const a = document.getElementById('input-a').value;
+  const b = document.getElementById('input-b').value;
+  const ctx = parseInt(document.getElementById('ctx-lines').value) || 3;
+
+  if (!a && !b) {
+    document.getElementById('diff-output').innerHTML = `<div class="empty-state"><div class="empty-icon">⟨/⟩</div><div class="empty-title">Nothing to compare</div><div class="empty-sub">Enter some text in both panels</div></div>`;
+    renderStats(null);
+    return;
+  }
+
+  const opts = {
+    ignoreCase: state.ignoreCase,
+    ignoreWhitespace: state.ignoreWhitespace,
+  };
+
+  state.diffResult = computeLineDiff(a, b, opts);
+  const stats = computeStats(state.diffResult);
+  const la = a ? a.split('\n').length : 0;
+  const lb = b ? b.split('\n').length : 0;
+  renderStats(stats, la, lb);
+
+  let html = '';
+  if (state.view === 'unified') html = renderUnified(state.diffResult, ctx, state.showInline);
+  else if (state.view === 'split') html = renderSplit(state.diffResult, ctx, state.showInline);
+  else html = renderWordView(a, b);
+
+  const out = document.getElementById('diff-output');
+  out.innerHTML = html;
+  out.classList.add('fade-in');
+  setTimeout(() => out.classList.remove('fade-in'), 400);
+
+  // Jump buttons
+  buildJumpBtns(stats);
+
+  // Re-run find if active
+  if (document.getElementById('find-bar').style.display !== 'none') doFind();
+}
+
+function buildJumpBtns(stats) {
+  const wrap = document.getElementById('jump-btns');
+  if (!stats || (stats.added + stats.deleted + stats.modified === 0)) { wrap.innerHTML = ''; return; }
+
+  // Find change line indices in DOM
+  wrap.innerHTML = `
+    <button class="jump-btn" onclick="jumpToChange(-1)" title="Previous change">↑ Prev</button>
+    <button class="jump-btn" onclick="jumpToChange(1)" title="Next change">Next ↓</button>
+  `;
+}
+
+let _changeIdx = -1;
+function jumpToChange(dir) {
+  const lines = document.querySelectorAll('.diff-line.add, .diff-line.del, .diff-line.mod');
+  if (!lines.length) return;
+  _changeIdx = Math.max(0, Math.min(lines.length - 1, _changeIdx + dir));
+  lines[_changeIdx].scrollIntoView({block: 'center', behavior: 'smooth'});
+  lines.forEach((l, i) => l.style.outline = i === _changeIdx ? '2px solid var(--accent)' : '');
+}
+
+// ===================== FIND =====================
+function toggleFind() {
+  const bar = document.getElementById('find-bar');
+  bar.style.display = bar.style.display === 'none' ? 'flex' : 'none';
+  if (bar.style.display !== 'none') { document.getElementById('find-input').focus(); doFind(); }
+  else clearFind();
+}
+
+function clearFind() {
+  document.querySelectorAll('#diff-output mark').forEach(m => {
+    m.replaceWith(document.createTextNode(m.textContent));
+  });
+  document.getElementById('find-count').textContent = '';
+  state.findMatches = []; state.findIdx = -1;
+}
+
+function doFind() {
+  clearFind();
+  const q = document.getElementById('find-input').value;
+  if (!q) return;
+  const out = document.getElementById('diff-output');
+  const walker = document.createTreeWalker(out, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let node;
+  while (node = walker.nextNode()) {
+    if (node.textContent.includes(q)) nodes.push(node);
+  }
+  let count = 0;
+  nodes.forEach(n => {
+    const parts = n.textContent.split(q);
+    const frag = document.createDocumentFragment();
+    parts.forEach((part, i) => {
+      frag.appendChild(document.createTextNode(part));
+      if (i < parts.length - 1) {
+        const mark = document.createElement('mark');
+        mark.textContent = q;
+        frag.appendChild(mark);
+        count++;
+      }
+    });
+    n.replaceWith(frag);
+  });
+  state.findMatches = Array.from(document.querySelectorAll('#diff-output mark'));
+  document.getElementById('find-count').textContent = count ? `${count} match${count>1?'es':''}` : 'No matches';
+  state.findIdx = -1;
+  if (count) findNext();
+}
+
+function findNext() {
+  if (!state.findMatches.length) return;
+  if (state.findIdx >= 0 && state.findMatches[state.findIdx]) state.findMatches[state.findIdx].classList.remove('current');
+  state.findIdx = (state.findIdx + 1) % state.findMatches.length;
+  const m = state.findMatches[state.findIdx];
+  m.classList.add('current');
+  m.scrollIntoView({block: 'center', behavior: 'smooth'});
+  document.getElementById('find-count').textContent = `${state.findIdx+1} / ${state.findMatches.length}`;
+}
+
+function findPrev() {
+  if (!state.findMatches.length) return;
+  if (state.findIdx >= 0 && state.findMatches[state.findIdx]) state.findMatches[state.findIdx].classList.remove('current');
+  state.findIdx = (state.findIdx - 1 + state.findMatches.length) % state.findMatches.length;
+  const m = state.findMatches[state.findIdx];
+  m.classList.add('current');
+  m.scrollIntoView({block: 'center', behavior: 'smooth'});
+  document.getElementById('find-count').textContent = `${state.findIdx+1} / ${state.findMatches.length}`;
+}
+
+function findNav(e) {
+  if (e.key === 'Enter') e.shiftKey ? findPrev() : findNext();
+  if (e.key === 'Escape') toggleFind();
+}
+
+// ===================== OPTIONS =====================
+function setView(v) {
+  state.view = v;
+  ['unified','split','word'].forEach(x => document.getElementById('view-'+x).classList.toggle('active', x===v));
+  runDiff();
+}
+
+function setDiffBy(v) {
+  state.diffBy = v;
+  ['line','word','char'].forEach(x => document.getElementById('by-'+x).classList.toggle('active', x===v));
+  runDiff();
+}
+
+function toggleOpt(key) {
+  state[key] = !state[key];
+  document.getElementById('tog-'+key).classList.toggle('on', state[key]);
+  runDiff();
+}
+
+// ===================== INPUTS =====================
+let _debounce;
+function onInput() {
+  const a = document.getElementById('input-a').value;
+  const b = document.getElementById('input-b').value;
+  document.getElementById('meta-a').textContent = `${a.split('\n').length} lines · ${a.length} chars`;
+  document.getElementById('meta-b').textContent = `${b.split('\n').length} lines · ${b.length} chars`;
+  clearTimeout(_debounce);
+  _debounce = setTimeout(runDiff, 500);
+}
+
+function clearAll() {
+  document.getElementById('input-a').value = '';
+  document.getElementById('input-b').value = '';
+  document.getElementById('meta-a').textContent = '0 lines';
+  document.getElementById('meta-b').textContent = '0 lines';
+  document.getElementById('diff-output').innerHTML = `<div class="empty-state"><div class="empty-icon">⟨/⟩</div><div class="empty-title">No comparison yet</div><div class="empty-sub">Paste text in both panels and click Compare</div></div>`;
+  renderStats(null);
+  document.getElementById('jump-btns').innerHTML = '';
+}
+
+function copyText(side) {
+  const val = document.getElementById('input-'+side).value;
+  navigator.clipboard.writeText(val).then(() => toast('Copied!'));
+}
+
+async function pasteText(side) {
+  try {
+    const t = await navigator.clipboard.readText();
+    document.getElementById('input-'+side).value = t;
+    onInput();
+  } catch { toast('Clipboard access denied'); }
+}
+
+function uploadFile(side) { document.getElementById('file-'+side).click(); }
+
+function loadFile(e, side) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('input-'+side).value = ev.target.result;
+    onInput();
+    toast(`Loaded: ${file.name}`);
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ===================== EXPORT =====================
+function copyDiff() {
+  const out = document.getElementById('diff-output').innerText;
+  navigator.clipboard.writeText(out).then(() => toast('Diff copied!'));
+}
+
+function exportPatch() {
+  if (!state.diffResult) { toast('Run comparison first'); return; }
+  const paired = pairModifiedLines(state.diffResult);
+  let patch = '--- a/original\n+++ b/modified\n';
+  let hunkLines = [];
+  let hunkStartA = 1, hunkStartB = 1, aOff = 0, bOff = 0;
+
+  // Build simple unified patch
+  const lines = [];
+  paired.forEach(l => {
+    if (l.type === 'same') lines.push(' ' + l.text);
+    else if (l.type === 'del') lines.push('-' + l.text);
+    else if (l.type === 'add') lines.push('+' + l.text);
+    else if (l.type === 'mod') { lines.push('-' + l.textA); lines.push('+' + l.textB); }
+  });
+  patch += lines.join('\n');
+
+  const blob = new Blob([patch], {type: 'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'diff.patch'; a.click();
+  URL.revokeObjectURL(url);
+  toast('Patch downloaded!');
+}
+
+// ===================== SAMPLE =====================
+function loadSample() {
+  const a = `function greet(name) {
+  // Simple greeting function
+  const message = "Hello, " + name + "!";
+  console.log(message);
+  return message;
+}
+
+const users = ["Alice", "Bob", "Charlie"];
+users.forEach(user => greet(user));
+
+// Old utility
+function add(a, b) {
+  return a + b;
+}`;
+
+  const b = `function greet(name, title = "") {
+  // Enhanced greeting with title support
+  const fullName = title ? \`\${title} \${name}\` : name;
+  const message = \`Hello, \${fullName}!\`;
+  console.log(\`[LOG] \${message}\`);
+  return message;
+}
+
+const users = ["Alice", "Bob", "Charlie", "Diana"];
+users.forEach(user => greet(user));
+
+// Math utilities
+function add(a, b) {
+  return a + b;
+}
+
+function multiply(a, b) {
+  return a * b;
+}`;
+
+  document.getElementById('input-a').value = a;
+  document.getElementById('input-b').value = b;
+  onInput();
+}
+
+// ===================== TOAST =====================
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ===================== INIT =====================
+onInput();
+</script>
+</body>
+</html>
